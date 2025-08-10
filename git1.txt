@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Auto Parts Storage System</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background: #f4f4f4;
+  padding: 15px;
+}
+
+input[type="text"],
+input[type="number"] {
+  margin: 5px 5px 15px 0;
+  padding: 8px;
+  width: 180px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+button {
+  padding: 8px 15px;
+  margin: 5px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #4a66d9;
+  color: white;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: #394fc1;
+}
+
+#boxContainer {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  max-width: 900px;
+  margin: 20px auto;
+}
+
+.box {
+  background: white;
+  padding: 15px;
+  border: 2px solid #333;
+  cursor: pointer;
+  border-radius: 8px;
+  user-select: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  text-align: left;
+}
+
+.box:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.highlight {
+  background: #fff9b0 !important;
+  border-color: #f2d600 !important;
+}
+
+.tag {
+  display: inline-block;
+  background-color: #7289da;
+  color: white;
+  padding: 3px 10px;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  margin: 3px 4px 3px 0;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.tag:hover {
+  background-color: #5b6eae;
+}
+
+/* Modal styles */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 99;
+}
+
+.modal-content {
+  background: white;
+  padding: 20px 25px;
+  margin: 10% auto;
+  width: 320px;
+  border-radius: 8px;
+  box-sizing: border-box;
+  position: relative;
+  text-align: left;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.close {
+  position: absolute;
+  right: 15px;
+  top: 10px;
+  font-size: 22px;
+  font-weight: bold;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tag-suggestions {
+  border: 1px solid #ccc;
+  max-height: 120px;
+  overflow-y: auto;
+  background: white;
+  position: relative;
+  margin-top: -8px;
+  margin-bottom: 10px;
+  display: none;
+  text-align: left;
+  padding: 5px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  z-index: 10;
+}
+
+.tag-suggestion-item {
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.tag-suggestion-item:hover {
+  background-color: #7289da;
+  color: white;
+}
+</style>
+</head>
+<body>
+
+<h1>Auto Parts Storage System</h1>
+
+<!-- Search -->
+<input type="text" id="searchInput" placeholder="Search items or tags..." />
+<button onclick="searchItem()">Search</button>
+<button onclick="resetSearch()">Reset</button>
+<p id="searchResult"></p>
+<div style="margin: 15px 0;">
+  <button id="exportBtn">Export Storage Data</button>
+  <input type="file" id="importFile" accept=".json" style="display:none" />
+  <button id="importBtn">Import Storage Data</button>
+</div>
+
+<!-- Box count -->
+<div id="boxCount" style="font-size:1.2rem; margin:15px 0;">📦 Total Boxes: 0</div>
+
+<!-- Add New Box -->
+<h2>Add New Box</h2>
+<div id="addBoxForm">
+  <input type="text" id="newBoxMake" placeholder="Make (e.g., Toyota)" />
+  <input type="text" id="newBoxModel" placeholder="Model (e.g., Camry)" />
+  <input type="number" id="newBoxYear" placeholder="Year (e.g., 2010)" min="1900" max="2100" />
+  <input type="text" id="newBoxItems" placeholder="Items (comma separated)" />
+  <br />
+  <button id="addBoxButton" disabled>Add Box</button>
+  <div id="validationMsg" style="color:red; font-size: 0.9rem; margin-top: 5px;"></div>
+</div>
+
+<!-- Boxes container -->
+<div id="boxContainer"></div>
+
+<!-- Modal -->
+<div id="modal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <h2 id="modalTitle"></h2>
+
+    <label>Make:</label><br />
+    <input type="text" id="editMake" /><br />
+
+    <label>Model:</label><br />
+    <input type="text" id="editModel" /><br />
+
+    <label>Year:</label><br />
+    <input type="number" id="editYear" min="1900" max="2100" /><br />
+
+    <label>Items (comma separated):</label><br />
+    <input type="text" id="editItems" /><br />
+
+    <label>Tags (comma separated):</label><br />
+    <input type="text" id="editTagsInput" placeholder="Add tags separated by commas" autocomplete="off" />
+    <div id="tagSuggestions" class="tag-suggestions"></div>
+    <br />
+
+    <button onclick="saveEdit()">Save Changes</button>
+    <button onclick="deleteBox()">Delete Box</button>
+  </div>
+</div>
+
+<script>
+const tagDictionary = {
+  bumper: "bumper",
+  panel: "panel",
+  window: "window",
+  engine: "engine",
+  belt: "belt",
+  hub: "hub",
+  wheel: "wheel",
+  door: "door",
+  mirror: "mirror",
+  light: "light",
+  tire: "tire",
+  brake: "brake",
+  gear: "gear",
+  filter: "filter",
+  radiator: "radiator",
+};
+
+let storage = JSON.parse(localStorage.getItem("storage")) || {};
+let currentBox = null;
+
+// Save storage to localStorage
+function saveToLocalStorage() {
+  localStorage.setItem("storage", JSON.stringify(storage));
+}
+
+// Render boxes grid
+function renderBoxes(highlightItem = "") {
+  let boxContainer = document.getElementById("boxContainer");
+  boxContainer.innerHTML = "";
+
+  Object.keys(storage)
+    .sort((a, b) => a - b)
+    .forEach((boxNum) => {
+      let div = document.createElement("div");
+      div.classList.add("box");
+
+      let boxData = storage[boxNum];
+
+      // Box number at top
+      let title = document.createElement("div");
+      title.textContent = `Box ${boxNum}`;
+      title.style.fontWeight = "bold";
+      div.appendChild(title);
+
+      // Show Make, Model, Year
+      let details = document.createElement("div");
+      details.style.fontSize = "0.85rem";
+      details.style.marginBottom = "6px";
+      details.textContent = `${boxData.make} ${boxData.model} (${boxData.year})`;
+      div.appendChild(details);
+
+      // Tags as clickable pills
+      let tagsDiv = document.createElement("div");
+      boxData.tags.forEach((tag) => {
+        let tagSpan = document.createElement("span");
+        tagSpan.classList.add("tag");
+        tagSpan.textContent = tag;
+        tagSpan.onclick = (e) => {
+          e.stopPropagation();
+          document.getElementById("searchInput").value = tag;
+          searchItem();
+        };
+        tagsDiv.appendChild(tagSpan);
+      });
+      div.appendChild(tagsDiv);
+
+      // Highlight if search matches
+      if (highlightItem) {
+        let foundInItems = boxData.items.some((item) =>
+          item.toLowerCase().includes(highlightItem)
+        );
+        let foundInTags = boxData.tags.some((tag) =>
+          tag.toLowerCase().includes(highlightItem)
+        );
+        if (foundInItems || foundInTags) {
+          div.classList.add("highlight");
+        }
+      }
+
+      div.onclick = () => openModal(boxNum);
+      boxContainer.appendChild(div);
+    });
+
+  updateBoxCount();
+}
+
+// Update the box count display
+function updateBoxCount() {
+  let count = Object.keys(storage).length;
+  document.getElementById("boxCount").textContent = `📦 Total Boxes: ${count}`;
+}
+
+// Add new box (auto numbered)
+const addBoxButton = document.getElementById("addBoxButton");
+const newBoxMake = document.getElementById("newBoxMake");
+const newBoxModel = document.getElementById("newBoxModel");
+const newBoxYear = document.getElementById("newBoxYear");
+const newBoxItems = document.getElementById("newBoxItems");
+const validationMsg = document.getElementById("validationMsg");
+
+function validateAddBoxInputs() {
+  validationMsg.textContent = "";
+
+  const make = newBoxMake.value.trim();
+  const model = newBoxModel.value.trim();
+  const year = newBoxYear.value.trim();
+  const items = newBoxItems.value.trim();
+
+  if (!make || !model || !year || !items) {
+    addBoxButton.disabled = true;
+    validationMsg.textContent = "All fields are required.";
+    return false;
+  }
+
+  const yearNum = parseInt(year, 10);
+  const currentYear = new Date().getFullYear();
+  if (isNaN(yearNum) || yearNum < 1900 || yearNum > currentYear) {
+    addBoxButton.disabled = true;
+    validationMsg.textContent = `Year must be between 1900 and ${currentYear}.`;
+    return false;
+  }
+
+  addBoxButton.disabled = false;
+  validationMsg.textContent = "";
+  return true;
+}
+
+// Listen to input events to validate on the fly
+[newBoxMake, newBoxModel, newBoxYear, newBoxItems].forEach((el) =>
+  el.addEventListener("input", validateAddBoxInputs)
+);
+
+// Add new box function
+function addNewBox() {
+  if (!validateAddBoxInputs()) return;
+
+  const make = newBoxMake.value.trim();
+  const model = newBoxModel.value.trim();
+  const year = newBoxYear.value.trim();
+  const itemsInput = newBoxItems.value.trim();
+
+  const items = itemsInput
+    .split(",")
+    .map((i) => i.trim())
+    .filter((i) => i);
+
+  let boxNumbers = Object.keys(storage).map(Number);
+  let maxBoxNum = boxNumbers.length ? Math.max(...boxNumbers) : 0;
+  let newBoxNum = maxBoxNum + 1;
+
+  let tagsSet = new Set();
+  items.forEach((item) => {
+    let lower = item.toLowerCase();
+    for (let keyword in tagDictionary) {
+      if (lower.includes(keyword)) {
+        tagsSet.add(tagDictionary[keyword]);
+      }
+    }
+  });
+  let tags = Array.from(tagsSet);
+
+  storage[newBoxNum] = { make, model, year, items, tags };
+  saveToLocalStorage();
+  renderBoxes();
+
+  // Clear inputs & disable button
+  newBoxMake.value = "";
+  newBoxModel.value = "";
+  newBoxYear.value = "";
+  newBoxItems.value = "";
+  addBoxButton.disabled = true;
+}
+
+// Attach event listener to Add Box button
+addBoxButton.onclick = addNewBox;
+
+const exportBtn = document.getElementById("exportBtn");
+const importBtn = document.getElementById("importBtn");
+const importFile = document.getElementById("importFile");
+
+// Export storage as JSON file
+exportBtn.onclick = function () {
+  const dataStr = JSON.stringify(storage, null, 2);
+  const blob = new Blob([dataStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "storage_backup.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// Trigger file input on import button click
+importBtn.onclick = () => importFile.click();
+
+// Handle file selection and load JSON
+importFile.onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function (event) {
+    try {
+      const importedData = JSON.parse(event.target.result);
+
+      // Basic validation - check it's an object with keys as box numbers
+      if (
+        typeof importedData === "object" &&
+        importedData !== null &&
+        Object.keys(importedData).every(
+          (key) =>
+            typeof importedData[key].items !== "undefined" &&
+            typeof importedData[key].tags !== "undefined"
+        )
+      ) {
+        if (confirm("Replace existing storage with imported data?")) {
+          storage = importedData;
+          saveToLocalStorage();
+          renderBoxes();
+          updateBoxCount();
+          alert("Storage data imported successfully.");
+        }
+      } else {
+        alert("Invalid storage data format.");
+      }
+    } catch (error) {
+      alert("Error reading the file: " + error.message);
+    }
+  };
+  reader.readAsText(file);
+  importFile.value = ""; // reset file input
+};
+
+// Search items and tags
+function searchItem() {
+  let query = document.getElementById("searchInput").value.trim().toLowerCase();
+  if (!query) {
+    document.getElementById("searchResult").textContent = "";
+    renderBoxes();
+    return;
+  }
+
+  let keywords = query.split(/\s+/);
+
+  let matchingBoxes = [];
+
+  for (let [boxNum, data] of Object.entries(storage)) {
+    // Check if all keywords match somewhere in box data
+    let allMatch = keywords.every((keyword) => {
+      return (
+        data.make.toLowerCase().includes(keyword) ||
+        data.model.toLowerCase().includes(keyword) ||
+        data.year.toString().includes(keyword) ||
+        data.items.some((item) => item.toLowerCase().includes(keyword)) ||
+        data.tags.some((tag) => tag.toLowerCase().includes(keyword))
+      );
+    });
+
+    if (allMatch) {
+      matchingBoxes.push(boxNum);
+    }
+  }
+
+  if (matchingBoxes.length > 0) {
+    document.getElementById(
+      "searchResult"
+    ).textContent = `Found in Boxes: ${matchingBoxes.join(", ")}`;
+    renderBoxes(query);
+  } else {
+    document.getElementById("searchResult").textContent = "Item not found.";
+    renderBoxes();
+  }
+}
+
+// Reset search
+function resetSearch() {
+  document.getElementById("searchInput").value = "";
+  document.getElementById("searchResult").textContent = "";
+  renderBoxes();
+}
+
+// Open modal to edit box
+function openModal(boxNum) {
+  currentBox = boxNum;
+  let boxData = storage[boxNum];
+
+  document.getElementById("modalTitle").textContent = `Box ${boxNum}`;
+
+  // Fill inputs
+  document.getElementById("editMake").value = boxData.make;
+  document.getElementById("editModel").value = boxData.model;
+  document.getElementById("editYear").value = boxData.year;
+  document.getElementById("editItems").value = boxData.items.join(", ");
+  document.getElementById("editTagsInput").value = boxData.tags.join(", ");
+
+  document.getElementById("modal").style.display = "block";
+}
+
+// Close modal
+function closeModal() {
+  document.getElementById("modal").style.display = "none";
+}
+
+// Save changes from modal edit
+function saveEdit() {
+  let make = document.getElementById("editMake").value.trim();
+  let model = document.getElementById("editModel").value.trim();
+  let year = document.getElementById("editYear").value.trim();
+  let newItems = document
+    .getElementById("editItems")
+    .value.trim()
+    .split(",")
+    .map((i) => i.trim())
+    .filter((i) => i);
+  let newTags = document
+    .getElementById("editTagsInput")
+    .value.trim()
+    .split(",")
+    .map((i) => i.trim())
+    .filter((i) => i);
+
+  if (!make || !model || !year || newItems.length === 0) {
+    alert("Make, Model, Year, and Items cannot be empty.");
+    return;
+  }
+
+  const yearNum = parseInt(year, 10);
+  const currentYear = new Date().getFullYear();
+  if (isNaN(yearNum) || yearNum < 1900 || yearNum > currentYear) {
+    alert(`Year must be between 1900 and ${currentYear}.`);
+    return;
+  }
+
+  storage[currentBox] = { make, model, year, items: newItems, tags: newTags };
+  saveToLocalStorage();
+  renderBoxes();
+  closeModal();
+}
+
+// Delete box
+function deleteBox() {
+  if (confirm(`Are you sure you want to delete Box ${currentBox}?`)) {
+    delete storage[currentBox];
+    saveToLocalStorage();
+    renderBoxes();
+    closeModal();
+  }
+}
+
+// Init page
+renderBoxes();
+</script>
+
+</body>
+</html>
